@@ -41,6 +41,12 @@ New to interpretability in PyHealth? Check out these complete examples:
   - **Sufficiency**: Measures how much prediction is retained when keeping only important features
   - Both functional API (``evaluate_attribution``) and class-based API (``Evaluator``)
 
+- ``examples/interpretability/concept_level_interpretability.py`` - Demonstrates concept-level interpretation with:
+
+  - **Batch-native concept summaries**: Go directly from ``batch + attributions`` to ranked concept rows
+  - **Human-readable grouped output**: Return grouped labels plus contributing codes
+  - **Processor-aware decoding**: Infer fitted processors from the dataset when available
+
 **SHAP Example:**
 
 - ``examples/shap_stagenet_mimic4.py`` - Demonstrates SHAP (SHapley Additive exPlanations) for StageNet mortality prediction. Shows how to:
@@ -93,5 +99,77 @@ Includes specialized support for Vision Transformer (ViT) attribution visualizat
 .. toctree::
     :maxdepth: 4
 
+    interpret/pyhealth.interpret.concept_grouping
     interpret/pyhealth.interpret.utils
+
+Concept-Level Interpretation
+----------------------------
+
+PyHealth also supports concept-level explanation workflows on top of the
+feature-level attribution methods above. This is useful for grouping related
+clinical codes into concepts such as CCS diagnosis categories or ATC drug
+classes.
+
+These grouped explanations are especially helpful for common PyHealth clinical
+tasks where users want a compact clinical summary rather than raw token-level
+saliency, for example:
+
+- mortality prediction
+- readmission prediction
+- length-of-stay prediction
+- drug recommendation when medications are represented as standardized codes
+
+This layer is intended for **code-like clinical modalities** backed by
+``pyhealth.medcode`` vocabularies. The most natural use cases are:
+
+- diagnosis codes such as ``ICD9CM -> CCSCM`` or ``ICD10CM -> CCSCM``
+- procedure codes such as ``ICD9PROC -> CCSPROC``
+- standardized medication codes such as ``NDC/RxNorm -> ATC``
+- ontology ancestor grouping within a single vocabulary via
+  ``group_by="ancestor"``
+
+It is not meant to directly group continuous lab tensors, image pixels, or
+free-text medication names. Those modalities can still use feature-level
+attribution methods, but they do not have a natural medcode grouping path.
+
+.. code-block:: python
+
+    from pyhealth.interpret import group_attributions
+
+    top_groups = group_attributions(
+        batch=batch,
+        attributions=attributions,
+        dataset=sample_dataset,
+        feature_key="conditions",
+        source_vocab="ICD9CM",
+        group_by="CCSCM",
+        topk=5,
+    )
+
+The point of this helper is not that grouping is impossible to script by hand.
+It is that PyHealth users otherwise end up repeating the same medcode-aware
+post-processing steps in ad hoc example code:
+
+- select one sample from a batched attribution output
+- infer the fitted processor for that feature
+- decode token ids back to medical codes
+- map those codes into higher-level clinical concepts
+- format a stable ranked summary for review or export
+
+Each returned row is ready to print or export and includes:
+
+- ``rank``
+- ``group_id``
+- ``label``
+- ``score``
+- ``tokens``
+- ``token_labels``
+
+The same one-call API works for other supported medcode-backed use cases, such
+as:
+
+- procedure grouping (for example ``ICD9PROC -> CCSPROC``)
+- standardized medication grouping (for example ``NDC -> ATC``)
+- modern ICD-10 code paths
+- same-vocabulary ancestor grouping via ``group_by="ancestor"``
  
